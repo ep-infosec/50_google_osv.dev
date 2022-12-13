@@ -1,0 +1,147 @@
+// Copyright 2021 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package osv.v1;
+
+import "osv/vulnerability.proto";
+import "google/api/annotations.proto";
+
+// A list of Vulnerability entries.
+message VulnerabilityList {
+  repeated osv.Vulnerability vulns = 1;
+  string next_page_token = 2;
+}
+
+// Batched lists of Vulnerability entries.
+message BatchVulnerabilityList {
+  repeated VulnerabilityList results = 1;
+}
+
+// Query format.
+message Query {
+  oneof param {
+    // The commit hash to query for. If specified, `version` should not be set.
+    string commit = 1;
+    // The version string to query for. A fuzzy match is done against upstream
+    // versions. If specified, `commit` should not be set.
+    string version = 2;
+  }
+
+  // The package to query against. When a `commit` hash is given, this is
+  // optional.
+  osv.Package package = 4;
+  string page_token = 5;
+}
+
+// Batch query format.
+message BatchQuery {
+  // The queries that form this batch query.
+  repeated Query queries = 1;
+}
+
+// Parameters for GetBugById.
+message GetVulnByIdParameters {
+  string id = 1;
+}
+
+// Parameters for QueryAffected.
+message QueryAffectedParameters {
+  Query query = 1;
+}
+
+// Parameters for QueryAffectedBatch.
+message QueryAffectedBatchParameters {
+  BatchQuery query = 1;
+}
+
+// Parameters for DetermineVersion.
+message DetermineVersionParameters {
+  VersionQuery query = 1;
+}
+
+// The version query.
+message VersionQuery {
+  // The name of the dependency. Can be empty.
+  string name = 1;
+  repeated FileHash file_hashes = 2;
+}
+
+// Information about the files in the repository
+// to identify the version.
+message FileHash {
+  // The file path inside the repository. 
+  // Can be empty but providing it increases matching quality.
+  string file_path = 1;
+  string hash_type = 2;
+  bytes hash = 3;
+}
+
+// Result of DetmineVersion.
+message VersionMatchList {
+  repeated VersionMatch matches = 1;
+}
+
+// Match information for the provided VersionQuery.
+message VersionMatch {
+  enum IDType {
+    UNSPECIFIED = 0;
+    OSV = 1;
+    CPE = 2;
+    VERSION = 3;
+    GIT_REPO = 4;
+  }
+  IDType type = 1;
+  // Identifier value.
+  string value = 2;
+  // Score in the interval (0.0, 1.0] with 1.0 being a perfect match.
+  double score = 3;
+}
+
+// Open source vulnerability database.
+service OSV {
+  // Return a `Vulnerability` object for a given OSV ID.
+  rpc GetVulnById ( GetVulnByIdParameters ) returns ( osv.Vulnerability ) {
+    option (google.api.http) = {
+      get:"/v1/vulns/{id}"
+    };
+  }
+
+  // Query vulnerabilities for a particular project at a given commit or
+  // version.
+  rpc QueryAffected ( QueryAffectedParameters ) returns ( VulnerabilityList ) {
+    option (google.api.http) = {
+      post:"/v1/query"
+      body:"query"
+    };
+  }
+
+  // Query vulnerabilities (batched) for given package versions and commits.
+  // This currently allows a maximum of 1000 package versions to be included in a single query.
+  rpc QueryAffectedBatch ( QueryAffectedBatchParameters ) returns ( BatchVulnerabilityList ) {
+    option (google.api.http) = {
+      post:"/v1/querybatch"
+      body:"query"
+    };
+  }
+
+  // Determine the version of the provided hash values.
+  rpc DetermineVersion(DetermineVersionParameters) returns (VersionMatchList) {
+    option (google.api.http) = {
+      post:"/v1experimental/determineversion"
+      body:"query"
+    };
+  }
+}

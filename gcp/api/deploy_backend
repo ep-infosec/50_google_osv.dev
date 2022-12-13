@@ -1,0 +1,22 @@
+#!/bin/bash -ex
+
+if [ $# -lt 2 ]; then
+  echo "Usage: $0 <tag> <service-name>"
+  exit 1
+fi
+
+tag=$1
+name=$2
+
+if [ -z "$CLOUDBUILD" ]; then
+  pushd ../../
+  docker build -t "gcr.io/oss-vdb/osv-server:$tag" -f gcp/api/Dockerfile .
+  docker push "gcr.io/oss-vdb/osv-server:$tag"
+  popd
+fi
+
+gcloud run deploy $name \
+  --platform managed \
+  --project=oss-vdb \
+  --region=us-central1 \
+  --image="gcr.io/oss-vdb/osv-server:$tag"
